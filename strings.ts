@@ -2,7 +2,7 @@
 // en_US is the canonical source (edit by hand). de_DE / ar_SA are the pilot
 // translations. Add more locales by adding another keyed bundle; any missing
 // key falls back to en_US via makeT().
-import { Bundles } from "../shared/i18n";
+import { Bundles } from "./shared/i18n";
 
 export const STRINGS: Bundles = {
   en_US: {
