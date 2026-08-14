@@ -619,8 +619,8 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           .${p}-store-tab.active{background:var(--primary);border-color:var(--primary);color:var(--primary-text)}
           /* ── Filter bar ── */
           .${p}-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center}
-          .${p}-type-wrap{position:relative;flex:1;min-width:0}
-          .${p}-type-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:7px 11px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff;font-size:12px;font-weight:600;color:var(--gray);cursor:pointer;font-family:inherit;transition:all .15s;text-align:start}
+          .${p}-type-wrap{position:relative;flex:1 1 140px;min-width:130px}
+          .${p}-type-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:7px 11px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff;font-size:12px;font-weight:600;color:var(--gray);cursor:pointer;font-family:inherit;transition:all .15s;text-align:start;white-space:nowrap;overflow:hidden}
           .${p}-type-btn:hover,.${p}-type-btn.open{border-color:var(--accent);color:var(--accent)}
           .${p}-type-btn svg{flex-shrink:0;transition:transform .15s}
           .${p}-type-btn.open svg{transform:rotate(180deg)}
@@ -891,8 +891,13 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           .${p}-store-drop{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 10px 0 11px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff}
           .${p}-store-drop-ic{color:var(--gray-lt);display:flex;flex-shrink:0}
           .${p}-store-select{border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--dark);cursor:pointer;outline:none;max-width:220px}
-          .${p}-fsel{height:34px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--gray);cursor:pointer;outline:none}
+          .${p}-fsel{flex:1 1 130px;min-width:120px;height:34px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--gray);cursor:pointer;outline:none}
           .${p}-fsel:focus,.${p}-store-select:focus{border-color:var(--primary)}
+          .${p}-type-btn>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .${p}-idsearch{flex:1 1 150px;min-width:130px}
+          .${p}-status-toggle{flex:0 0 auto}
+          .${p}-store-drop{max-width:100%}
+          .${p}-store-select{max-width:min(260px,70vw)}
         </style>
 
         <div class="${p}${limitHeight ? ` ${p}-limited` : ""}">
@@ -2974,7 +2979,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         // Refresh static labels painted before the locale was known.
         const setText=(id:string,val:string)=>{const el=container.querySelector(`#${id}`); if(el) el.textContent=val;};
         const setAttr=(id:string,attr:string,val:string)=>{const el=container.querySelector(`#${id}`); if(el) el.setAttribute(attr,val);};
-        setText(`${p}-title-text`, auditMode?tr("auditResults"):tr("myTasks"));
+        setText(`${p}-title-text`, auditMode?tr("auditResults"):"Store Tasks");
         setText(`${p}-new-label`, tr("newTask"));
         setAttr(`${p}-new`,"title",tr("newTask"));
         setAttr(`${p}-refresh`,"title",tr("refresh"));
