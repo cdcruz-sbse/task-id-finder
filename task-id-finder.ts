@@ -361,7 +361,9 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
       let activeTypeFilters          = new Set<string>();
       let activeStatusFilter         = "open";
       let activeInstallFilter        = "all";
-      let idSearch                   = "";  // Task ID Finder: keyword search
+      let idSearch                   = "";  // Store Tasks: keyword search
+      let activeRecurrence           = "all"; // all | oneoff | recurring
+      let activePriority             = "all"; // all | Priority_1 | Priority_2 | Priority_3
       let activeAuditListId          = "";
       let auditLists: AuditList[]    = [];
       let showCompletedAudit         = false;
@@ -884,13 +886,20 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           .${p}-card:hover .${p}-copyid{opacity:1}
           .${p}-copyid:hover{border-color:var(--primary)!important;color:var(--primary)!important}
           .${p}-copyid.copied{color:var(--success)!important;border-color:var(--success)!important;opacity:1}
+          /* ── Store Tasks: compact store dropdown + filter selects ── */
+          .${p}-list-filters{flex-wrap:wrap}
+          .${p}-store-drop{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 10px 0 11px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff}
+          .${p}-store-drop-ic{color:var(--gray-lt);display:flex;flex-shrink:0}
+          .${p}-store-select{border:none;background:none;font-family:inherit;font-size:13px;font-weight:700;color:var(--dark);cursor:pointer;outline:none;max-width:220px}
+          .${p}-fsel{height:34px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--gray);cursor:pointer;outline:none}
+          .${p}-fsel:focus,.${p}-store-select:focus{border-color:var(--primary)}
         </style>
 
         <div class="${p}${limitHeight ? ` ${p}-limited` : ""}">
           <div class="${p}-header">
             <div class="${p}-title">
               <span class="${p}-title-dot"></span>
-              <span id="${p}-title-text">${auditMode?tr("auditResults"):tr("myTasks")}</span>
+              <span id="${p}-title-text">${auditMode?tr("auditResults"):"Store Tasks"}</span>
               <span class="${p}-badge-count" id="${p}-count">0</span>
             </div>
             <div class="${p}-header-actions">
@@ -932,6 +941,17 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
                 </button>
                 <div class="${p}-type-menu" id="${p}-type-menu"></div>
               </div>
+              <select class="${p}-fsel" id="${p}-recur-filter" aria-label="Recurrence">
+                <option value="all">All tasks</option>
+                <option value="oneoff">One-off</option>
+                <option value="recurring">Recurring</option>
+              </select>
+              <select class="${p}-fsel" id="${p}-prio-filter" aria-label="Priority">
+                <option value="all">All priorities</option>
+                <option value="Priority_1">High priority</option>
+                <option value="Priority_2">Medium priority</option>
+                <option value="Priority_3">Low priority</option>
+              </select>
               <div class="${p}-status-toggle">
                 <button type="button" class="${p}-status-opt active" data-status="open">${tr("open")}</button>
                 <button type="button" class="${p}-status-opt" data-status="done">${tr("done")}</button>
@@ -965,9 +985,13 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
       const listWrap      = container.querySelector(`#${p}-list-wrap`)!;
       const refreshBtn    = container.querySelector(`#${p}-refresh`) as HTMLButtonElement;
 
-      // Task ID Finder: keyword search over the task list
+      // Store Tasks: keyword search over the task list
       const idSearchEl    = container.querySelector(`#${p}-idsearch`) as HTMLInputElement|null;
       if(idSearchEl) idSearchEl.addEventListener("input",()=>{ idSearch=idSearchEl.value.trim(); renderList(); });
+      const recurFilterEl = container.querySelector(`#${p}-recur-filter`) as HTMLSelectElement|null;
+      if(recurFilterEl) recurFilterEl.addEventListener("change",()=>{ activeRecurrence=recurFilterEl.value; renderList(); });
+      const prioFilterEl  = container.querySelector(`#${p}-prio-filter`) as HTMLSelectElement|null;
+      if(prioFilterEl) prioFilterEl.addEventListener("change",()=>{ activePriority=prioFilterEl.value; renderList(); });
 
       const typeBtn       = !auditMode ? container.querySelector(`#${p}-type-btn`) as HTMLButtonElement : null;
       const typeLabelEl   = !auditMode ? container.querySelector(`#${p}-type-label`) as HTMLElement : null;
@@ -1772,6 +1796,9 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           if(activeStatusFilter==="open"&&isDone) return false;
           if(activeStatusFilter==="done"&&!isDone) return false;
           if(idSearch){ const q=idSearch.toLowerCase(); if(!(((t.title||"")+" "+(t.description||"")).toLowerCase().includes(q))) return false; }
+          if(activeRecurrence==="oneoff"&&t.isRecurring) return false;
+          if(activeRecurrence==="recurring"&&!t.isRecurring) return false;
+          if(activePriority!=="all"&&t.priority!==activePriority) return false;
           return true;
         });
       }
@@ -1806,7 +1833,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           });
           return;
         }
-        // Normal mode
+        // Normal mode — compact store dropdown
         const instMap=new Map<string,{title:string;count:number}>();
         for(const t of allTasks){
           if(t.taskType==="audit-result") continue;
@@ -1817,19 +1844,18 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         storeTabs.style.display="flex";
         const total=allTasks.filter(t=>t.taskType!=="audit-result").length;
         storeTabs.innerHTML=`
-          <div role="button" tabindex="0" class="${p}-store-tab ${activeInstallFilter==="all"?"active":""}" data-inst="all">
-            All <span style="opacity:.6;font-weight:400">(${total})</span>
-          </div>
-          ${[...instMap.entries()].map(([id,info])=>`
-            <div role="button" tabindex="0" class="${p}-store-tab ${activeInstallFilter===id?"active":""}" data-inst="${esc(id)}">
-              ${esc(info.title||id)} <span style="opacity:.6;font-weight:400">(${info.count})</span>
-            </div>`).join("")}`;
-        storeTabs.querySelectorAll(`.${p}-store-tab`).forEach(btn=>{
-          btn.addEventListener("click",()=>{
-            activeInstallFilter=(btn as HTMLElement).dataset.inst||"all";
-            activeTypeFilters.clear(); dropdownOpen=false;
-            renderStoreTabs(); renderTypeFilters(); renderList();
-          });
+          <label class="${p}-store-drop">
+            <span class="${p}-store-drop-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+            <select class="${p}-store-select" id="${p}-store-select" aria-label="Store">
+              <option value="all"${activeInstallFilter==="all"?" selected":""}>All stores (${total})</option>
+              ${[...instMap.entries()].map(([id,info])=>`<option value="${esc(id)}"${activeInstallFilter===id?" selected":""}>${esc(info.title||id)} (${info.count})</option>`).join("")}
+            </select>
+          </label>`;
+        const storeSel=storeTabs.querySelector(`#${p}-store-select`) as HTMLSelectElement|null;
+        if(storeSel) storeSel.addEventListener("change",()=>{
+          activeInstallFilter=storeSel.value||"all";
+          activeTypeFilters.clear(); dropdownOpen=false;
+          renderTypeFilters(); renderList();
         });
       }
 
@@ -3402,7 +3428,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
 // ── Block registration ────────────────────────────────────────────────────────
 
 const blockDefinition: BlockDefinition = {
-  name:"task-id-finder", label:"Task ID Finder",
+  name:"task-id-finder", label:"Store Tasks",
   attributes:["apitoken","baseurl","usethemecolors","primarycolor","accentcolor","backgroundcolor","storelabelsingular","storelabelplural","typecolors","showalltasks","showdonetasks","auditmode","enablecomments","requirephotoproof","allowtaskcreation","allowtaskassignment","notifyonassign","detailedlogging","debugmode","limitheight","maxheight","showcalendar","showupcomingrecurring"],
   factory, configurationSchema, uiSchema, blockLevel:"block", iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNzEgMTcxIj48Y2lyY2xlIGN4PSI4NS41IiBjeT0iODUuNSIgcj0iODUuNSIgZmlsbD0iIzBFQTVFOSIvPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDQzLjUgNDMuNSkgc2NhbGUoMy41KSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTMgMTcgMiAyIDQtNCIvPjxwYXRoIGQ9Im0zIDcgMiAyIDQtNCIvPjxwYXRoIGQ9Ik0xMyA2aDgiLz48cGF0aCBkPSJNMTMgMTJoOCIvPjxwYXRoIGQ9Ik0xMyAxOGg4Ii8+PC9nPjwvc3ZnPg==",
 };
