@@ -1,9 +1,14 @@
-# Task ID Finder
+# Store Tasks
 
-A Staffbase custom widget that lets an admin **browse and search tasks** across the
-installations/lists they can see, and **copy a task's `installationId/taskId`** with one
+> Widget label: **Store Tasks** · repo/bundle name: `task-id-finder`
+
+A Staffbase custom widget that lets an admin **browse, search, and filter tasks** across the
+stores (installations) they can see, and **copy a task's `installationId/taskId`** with one
 click — ready to paste into the **[Task Selector widget](https://github.com/cdcruz-sbse/task-selector-widget)**
 config in the Staffbase News editor.
+
+Controls: a compact **store dropdown**, **keyword search**, and filters for **recurrence**
+(all / one-off / recurring), **priority** (all / high / med / low), and **status** (open / done).
 
 It's a **duplicate of `my-tasks-widget`** (from `eirastaffbase/widgets`) with two additions:
 1. a **keyword search** box over the task list, and
