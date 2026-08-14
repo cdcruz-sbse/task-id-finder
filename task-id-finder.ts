@@ -361,6 +361,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
       let activeTypeFilters          = new Set<string>();
       let activeStatusFilter         = "open";
       let activeInstallFilter        = "all";
+      let idSearch                   = "";  // Task ID Finder: keyword search
       let activeAuditListId          = "";
       let auditLists: AuditList[]    = [];
       let showCompletedAudit         = false;
@@ -875,6 +876,14 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           /* RTL: flip horizontal directional arrows */
           [dir="rtl"] .mtw-audit-arrow svg{transform:scaleX(-1)}
           ${limitCss}
+          /* ── Task ID Finder additions ── */
+          .${p}-idsearch{flex:1 1 150px;min-width:110px;height:34px;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fafafa;font-family:inherit;font-size:13px;color:var(--dark)}
+          .${p}-idsearch:focus{outline:none;border-color:var(--primary);background:#fff}
+          .${p}-card{position:relative}
+          .${p}-copyid{position:absolute;top:8px;inset-inline-end:8px;width:26px;height:26px;border:1.5px solid var(--border)!important;border-radius:var(--r-sm)!important;background:#fff!important;color:var(--gray)!important;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,color .15s,border-color .15s;z-index:2;padding:0!important;font-family:inherit;margin:0!important}
+          .${p}-card:hover .${p}-copyid{opacity:1}
+          .${p}-copyid:hover{border-color:var(--primary)!important;color:var(--primary)!important}
+          .${p}-copyid.copied{color:var(--success)!important;border-color:var(--success)!important;opacity:1}
         </style>
 
         <div class="${p}${limitHeight ? ` ${p}-limited` : ""}">
@@ -915,6 +924,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
               <button type="button" class="${p}-view-opt" data-view="calendar">${tr("calendar")}</button>
             </div>`:""}
             <div class="${p}-list-filters" id="${p}-list-filters">
+              <input type="text" class="${p}-idsearch" id="${p}-idsearch" placeholder="Search tasks…" autocomplete="off" spellcheck="false" />
               <div class="${p}-type-wrap" id="${p}-type-wrap">
                 <button type="button" class="${p}-type-btn" id="${p}-type-btn">
                   <span id="${p}-type-label">${tr("allTypes")}</span>
@@ -954,6 +964,10 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
       const storeTabs     = container.querySelector(`#${p}-store-tabs`) as HTMLElement;
       const listWrap      = container.querySelector(`#${p}-list-wrap`)!;
       const refreshBtn    = container.querySelector(`#${p}-refresh`) as HTMLButtonElement;
+
+      // Task ID Finder: keyword search over the task list
+      const idSearchEl    = container.querySelector(`#${p}-idsearch`) as HTMLInputElement|null;
+      if(idSearchEl) idSearchEl.addEventListener("input",()=>{ idSearch=idSearchEl.value.trim(); renderList(); });
 
       const typeBtn       = !auditMode ? container.querySelector(`#${p}-type-btn`) as HTMLButtonElement : null;
       const typeLabelEl   = !auditMode ? container.querySelector(`#${p}-type-label`) as HTMLElement : null;
@@ -1757,6 +1771,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           const isDone=t.status==="DONE"||t.status==="done"||t.status==="CLOSED";
           if(activeStatusFilter==="open"&&isDone) return false;
           if(activeStatusFilter==="done"&&!isDone) return false;
+          if(idSearch){ const q=idSearch.toLowerCase(); if(!(((t.title||"")+" "+(t.description||"")).toLowerCase().includes(q))) return false; }
           return true;
         });
       }
@@ -2079,9 +2094,22 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         listWrap.querySelectorAll(`.${p}-card`).forEach((card: Element)=>{
           card.addEventListener("click",(e: Event)=>{
             if((e.target as Element).closest(`.${p}-check-wrap`)) return;
+            if((e.target as Element).closest(`.${p}-copyid`)) return;
             const taskId=(card as HTMLElement).dataset.taskId;
             const task=allTasks.find(t=>t.id===taskId);
             if(task) openDetail(task);
+          });
+        });
+        // Task ID Finder: copy "installationId/taskId" from each card
+        listWrap.querySelectorAll(`.${p}-copyid`).forEach((btn: Element)=>{
+          btn.addEventListener("click",async(e: Event)=>{
+            e.stopPropagation();
+            const text=(btn as HTMLElement).dataset.copyId||"";
+            let ok=false;
+            try{ await navigator.clipboard.writeText(text); ok=true; }
+            catch(_){ try{ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.select(); ok=document.execCommand("copy"); document.body.removeChild(ta); }catch(_){ ok=false; } }
+            const b=btn as HTMLElement; b.classList.add("copied"); b.title=ok?"Copied!":"Copy failed";
+            setTimeout(()=>{ b.classList.remove("copied"); b.title="Copy task ID"; },1200);
           });
         });
       }
@@ -2334,6 +2362,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
 
         return `
           <div class="${p}-card ${isDone?"done":""}" data-task-id="${esc(task.id)}" data-install-id="${esc(task.installationId)}">
+            <button type="button" class="${p}-copyid" data-copy-id="${esc(task.installationId)}/${esc(task.id)}" title="Copy task ID"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
             <div class="${p}-card-inner">
               <div class="${p}-check-wrap">
                 <div class="${p}-check ${isDone?"checked":""}"

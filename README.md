@@ -29,9 +29,22 @@ Task ID Finder  →  copy "installationId/taskId"  →  paste into Task Selector
 | Item | State |
 |---|---|
 | Duplicate real source (renamed, imports fixed) | ✅ Done |
-| Search box + per-task copy icon | ⏳ In progress |
-| Build (`npm install && npm run build`) | ⏳ Needs Node 20+ |
+| Search box + per-task copy icon (code) | ✅ Done — 6 additive edits in `task-id-finder.ts` |
+| Feature behavior validated | ✅ via [`preview-mock.html`](preview-mock.html) (search + copy) |
+| Build (`npm install && npm run build`) | ⏳ Needs Node 20+ (compile-check pending) |
 | Deploy (host `dist/task-id-finder.js`) | ⏳ |
+
+### What was added (all additive; see the `Task ID Finder` comments in the source)
+
+1. **Keyword search** — an `#…-idsearch` input in the filters bar; an `idSearch`
+   state var filtered inside `filteredTasks()`; wired to re-run `renderList()`.
+2. **Per-task copy icon** — a `.…-copyid` button in `renderTaskCard()` carrying
+   `data-copy-id="installationId/taskId"`; a handler in `bindListEvents()` copies it
+   (reusing the widget's existing `navigator.clipboard` + `execCommand` fallback),
+   with a "Copied!" state.
+
+`preview-mock.html` is a zero-build standalone that mirrors this exact logic so the
+behavior is verifiable before the real bundle is compiled.
 
 ## Build (once Node 20+ is available)
 

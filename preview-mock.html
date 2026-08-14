@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Task ID Finder — feature mock (search + copy)</title>
+<!--
+  Standalone MOCK of the two features added to the duplicated my-tasks-widget:
+    1. a keyword SEARCH box over the task list (mirrors filteredTasks()),
+    2. a per-task COPY button that copies "installationId/taskId"
+       (mirrors renderTaskCard() + bindListEvents() copy handler).
+  This validates the behavior/UX before the real bundle is built with Node.
+  The real widget reuses the same clipboard fallback the source already had.
+-->
+<style>
+  :root{ --primary:#0EA5E9; --primary-rgb:14,165,233; --success:#2E7D4A; --error:#C41E3A;
+    --dark:#1A1A1A; --gray:#6b7280; --gray-lt:#9ca3af; --border:#e5e7eb; --r-sm:6px; --r-md:10px; --r-lg:14px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#f4f5f7;color:var(--dark);padding:22px;line-height:1.45;}
+  .wrap{max-width:560px;margin:0 auto;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);
+    box-shadow:0 1px 3px rgba(0,0,0,.05);padding:18px;}
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .head .dot{width:9px;height:9px;border-radius:50%;background:var(--primary);}
+  .head h1{font-size:16px;font-weight:800;}
+  .head .badge{margin-left:auto;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;
+    color:#fff;background:var(--primary);padding:3px 8px;border-radius:999px;}
+  .filters{display:flex;gap:8px;align-items:center;margin-bottom:14px;}
+  .idsearch{flex:1 1 150px;min-width:110px;height:34px;padding:0 12px;border:1.5px solid var(--border);
+    border-radius:var(--r-md);background:#fafafa;font-family:inherit;font-size:13px;color:var(--dark);}
+  .idsearch:focus{outline:none;border-color:var(--primary);background:#fff;}
+  .count{font-size:12px;color:var(--gray-lt);font-weight:600;white-space:nowrap;}
+  .list{display:flex;flex-direction:column;gap:8px;}
+  .card{position:relative;display:flex;gap:12px;padding:12px 13px;background:#fff;border:1px solid var(--border);
+    border-radius:var(--r-md);box-shadow:0 1px 3px rgba(0,0,0,.05);transition:box-shadow .15s;}
+  .card:hover{box-shadow:0 4px 14px rgba(0,0,0,.09);}
+  .check{width:20px;height:20px;border-radius:50%;border:2px solid #d1d5db;flex-shrink:0;margin-top:1px;}
+  .body{flex:1;min-width:0;}
+  .top{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5px;}
+  .b{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;font-size:9.5px;
+    font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#fff;}
+  .b-recur{background:rgba(var(--primary-rgb),.12);color:var(--primary);}
+  .title{font-size:14px;font-weight:600;line-height:1.4;}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:5px;font-size:11px;color:var(--gray-lt);font-weight:600;}
+  /* copy button — appears on hover, mirrors the widget CSS */
+  .copyid{position:absolute;top:8px;right:8px;width:26px;height:26px;border:1.5px solid var(--border);
+    border-radius:var(--r-sm);background:#fff;color:var(--gray);cursor:pointer;display:flex;align-items:center;
+    justify-content:center;opacity:0;transition:opacity .15s,color .15s,border-color .15s;padding:0;}
+  .card:hover .copyid{opacity:1;}
+  .copyid:hover{border-color:var(--primary);color:var(--primary);}
+  .copyid.copied{color:var(--success);border-color:var(--success);opacity:1;}
+  .empty{padding:26px;text-align:center;color:var(--gray-lt);font-size:13px;}
+  .copied-str{margin-top:14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:#334155;
+    background:#0f172a08;border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;min-height:34px;}
+  .copied-str b{color:var(--success);}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:#0f172a;color:#fff;font-size:12.5px;font-weight:600;padding:9px 14px;border-radius:999px;
+    box-shadow:0 6px 24px rgba(0,0,0,.25);transition:all .25s;pointer-events:none;z-index:50;}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><span class="dot"></span><h1>Task ID Finder</h1><span class="badge">feature mock</span></div>
+  <div class="filters">
+    <input type="text" class="idsearch" id="q" placeholder="Search tasks…" autocomplete="off" spellcheck="false" />
+    <span class="count" id="count"></span>
+  </div>
+  <div class="list" id="list"></div>
+  <div class="copied-str" id="copied">Hover a task and click the copy icon → the <b>installationId/taskId</b> lands here (and on your clipboard).</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// mock tasks (real schema: installationId + id + type marker in description)
+const TASKS = [
+  {id:"t01", installationId:"store-demo-001", title:"Unlock and disarm the store", type:"storetask", recur:true,  store:"Downtown", list:"Store Opening"},
+  {id:"t04", installationId:"store-demo-001", title:"Check walk-in freezer temperature log", type:"safety", recur:true, store:"Downtown", list:"Compliance & Safety", desc:"Record temp; flag if above -18°C."},
+  {id:"t06", installationId:"store-demo-001", title:"Complete monthly food-safety training", type:"training", recur:false, store:"Downtown", list:"Compliance & Safety"},
+  {id:"t08", installationId:"store-demo-001", title:"Set up new seasonal end-cap display", type:"merchandising", recur:false, store:"Downtown", list:"Weekly Merchandising"},
+  {id:"t12", installationId:"store-demo-001", title:"Submit weekly compliance attestation", type:"compliance", recur:true, store:"Downtown", list:"Compliance & Safety"},
+  {id:"t13", installationId:"store-airport-002", title:"Open the airside kiosk shutters", type:"storetask", recur:true, store:"Airport", list:"Store Opening"},
+];
+const CAT_COLORS = {storetask:"#0EA5E9", safety:"#D97706", training:"#4A90A4", merchandising:"#7C3AED", compliance:"#8B4513", inventory:"#0369A1"};
+const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const RECUR = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+const COPY = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const byId = id => document.getElementById(id);
+
+// mirrors filteredTasks(): keyword over title + description
+function filtered(q){
+  q = q.trim().toLowerCase();
+  if(!q) return TASKS;
+  return TASKS.filter(t => ((t.title||"")+" "+(t.desc||"")+" "+(t.type||"")).toLowerCase().includes(q));
+}
+function render(){
+  const rows = filtered(byId("q").value);
+  byId("count").textContent = `${rows.length} of ${TASKS.length}`;
+  const list = byId("list");
+  if(!rows.length){ list.innerHTML = `<div class="empty">No tasks match “${esc(byId("q").value)}”.</div>`; return; }
+  list.innerHTML = rows.map(t=>{
+    const col = CAT_COLORS[t.type] || "#6b7280";
+    return `<div class="card" data-task-id="${t.id}" data-install-id="${t.installationId}">
+      <button class="copyid" data-copy-id="${esc(t.installationId)}/${esc(t.id)}" title="Copy task ID">${COPY}</button>
+      <div class="check"></div>
+      <div class="body">
+        <div class="top">
+          <span class="b" style="background:${col}">${esc(t.type)}</span>
+          ${t.recur?`<span class="b b-recur">${RECUR} Recurring</span>`:""}
+        </div>
+        <div class="title">${esc(t.title)}</div>
+        <div class="meta"><span>🏬 ${esc(t.store)}</span><span>🗂 ${esc(t.list)}</span></div>
+      </div>
+    </div>`;
+  }).join("");
+  // mirrors bindListEvents() copy handler (with the same clipboard fallback)
+  list.querySelectorAll(".copyid").forEach(btn=>{
+    btn.addEventListener("click", async e=>{
+      e.stopPropagation();
+      const text = btn.dataset.copyId || "";
+      let ok=false;
+      try{ await navigator.clipboard.writeText(text); ok=true; }
+      catch(_){ try{ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.select(); ok=document.execCommand("copy"); document.body.removeChild(ta);}catch(_){ ok=false; } }
+      btn.classList.add("copied"); btn.title = ok?"Copied!":"Copy failed";
+      byId("copied").innerHTML = `Copied to clipboard: <b>${esc(text)}</b>  → paste into the Task Selector config.`;
+      toast(ok?"Copied task ID ✓":"Copy blocked in this frame");
+      setTimeout(()=>{ btn.classList.remove("copied"); btn.title="Copy task ID"; }, 1200);
+    });
+  });
+}
+let toastT; function toast(m){ const el=byId("toast"); el.textContent=m; el.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("show"),1500); }
+byId("q").addEventListener("input", render);
+render();
+</script>
+</body>
+</html>
