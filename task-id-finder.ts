@@ -882,8 +882,9 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           .${p}-idsearch{flex:1 1 150px;min-width:110px;height:34px;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--r-md);background:#fafafa;font-family:inherit;font-size:13px;color:var(--dark)}
           .${p}-idsearch:focus{outline:none;border-color:var(--primary);background:#fff}
           .${p}-card{position:relative}
-          .${p}-copyid{position:absolute;top:8px;inset-inline-end:8px;width:26px;height:26px;border:1.5px solid var(--border)!important;border-radius:var(--r-sm)!important;background:#fff!important;color:var(--gray)!important;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s,color .15s,border-color .15s;z-index:2;padding:0!important;font-family:inherit;margin:0!important}
-          .${p}-card:hover .${p}-copyid{opacity:1}
+          .${p}-cardbtns{position:absolute;top:8px;inset-inline-end:8px;display:flex;gap:6px;opacity:0;transition:opacity .15s;z-index:2}
+          .${p}-card:hover .${p}-cardbtns{opacity:1}
+          .${p}-copyid{width:26px;height:26px;border:1.5px solid var(--border)!important;border-radius:var(--r-sm)!important;background:#fff!important;color:var(--gray)!important;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:color .15s,border-color .15s;padding:0!important;font-family:inherit;margin:0!important}
           .${p}-copyid:hover{border-color:var(--primary)!important;color:var(--primary)!important}
           .${p}-copyid.copied{color:var(--success)!important;border-color:var(--success)!important;opacity:1}
           /* ── Store Tasks: compact store dropdown + filter selects ── */
@@ -2131,16 +2132,18 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             if(task) openDetail(task);
           });
         });
-        // Task ID Finder: copy "installationId/taskId" from each card
+        // Store Tasks: copy "installationId/taskId" (task) or "installationId/listId" (list)
         listWrap.querySelectorAll(`.${p}-copyid`).forEach((btn: Element)=>{
           btn.addEventListener("click",async(e: Event)=>{
             e.stopPropagation();
-            const text=(btn as HTMLElement).dataset.copyId||"";
+            const el=btn as HTMLElement;
+            const isList=!!el.dataset.copyList;
+            const text=el.dataset.copyId||el.dataset.copyList||"";
             let ok=false;
             try{ await navigator.clipboard.writeText(text); ok=true; }
             catch(_){ try{ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.focus(); ta.select(); ok=document.execCommand("copy"); document.body.removeChild(ta); }catch(_){ ok=false; } }
-            const b=btn as HTMLElement; b.classList.add("copied"); b.title=ok?"Copied!":"Copy failed";
-            setTimeout(()=>{ b.classList.remove("copied"); b.title="Copy task ID"; },1200);
+            el.classList.add("copied"); el.title=ok?"Copied!":"Copy failed";
+            setTimeout(()=>{ el.classList.remove("copied"); el.title=isList?"Copy list ID":"Copy task ID"; },1200);
           });
         });
       }
@@ -2393,7 +2396,10 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
 
         return `
           <div class="${p}-card ${isDone?"done":""}" data-task-id="${esc(task.id)}" data-install-id="${esc(task.installationId)}">
-            <button type="button" class="${p}-copyid" data-copy-id="${esc(task.installationId)}/${esc(task.id)}" title="Copy task ID"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <div class="${p}-cardbtns">
+              <button type="button" class="${p}-copyid" data-copy-id="${esc(task.installationId)}/${esc(task.id)}" title="Copy task ID"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+              ${task.listId?`<button type="button" class="${p}-copyid ${p}-copylist" data-copy-list="${esc(task.installationId)}/${esc(task.listId)}" title="Copy list ID"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>`:""}
+            </div>
             <div class="${p}-card-inner">
               <div class="${p}-check-wrap">
                 <div class="${p}-check ${isDone?"checked":""}"
