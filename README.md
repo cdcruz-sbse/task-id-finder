@@ -4,8 +4,8 @@
 
 A Staffbase custom widget that lets an admin **browse, search, and filter tasks** across the
 stores (installations) they can see, and **copy a task's `installationId/taskId`** with one
-click — ready to paste into the **[Task Selector widget](https://github.com/cdcruz-sbse/task-selector-widget)**
-config in the Staffbase News editor.
+click — plus **copy a list's ID** (`installationId/listId`) to embed a whole list — ready to paste
+into the **[Task Selector widget](https://github.com/cdcruz-sbse/task-selector-widget)** config in the Staffbase News editor.
 
 Controls: a compact **store dropdown**, **keyword search**, and filters for **recurrence**
 (all / one-off / recurring), **priority** (all / high / med / low), and **status** (open / done).
