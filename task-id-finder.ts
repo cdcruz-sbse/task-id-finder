@@ -461,6 +461,9 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           .${p}-detail-head-badges{display:flex;gap:6px;flex-wrap:wrap;flex:1;align-items:center}
           .${p}-detail-close{width:28px;height:28px;border-radius:50%;border:none;background:#f3f4f6;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray);flex-shrink:0;transition:background .15s,color .15s;font-family:inherit}
           .${p}-detail-close:hover{background:var(--border);color:var(--dark)}
+          .${p}-detail-edit{width:28px;height:28px;border-radius:50%;border:none;background:#f3f4f6;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray);flex-shrink:0;transition:background .15s,color .15s;font-family:inherit}
+          .${p}-detail-edit:hover{background:var(--border);color:var(--dark)}
+          .${p}-detail.audit-view .${p}-detail-edit{display:none}
           .${p}-detail-body{flex:1;overflow-y:auto;padding:20px;min-height:0}
           .${p}-detail-title{font-size:18px;font-weight:800;color:var(--dark);line-height:1.3;margin-bottom:14px;word-break:break-word}
           .${p}-detail-title.done{text-decoration:line-through;color:var(--gray)}
@@ -1064,6 +1067,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         <div class="${p}-detail-handle"></div>
         <div class="${p}-detail-head">
           <div class="${p}-detail-head-badges" id="${p}-detail-badges-${instId}"></div>
+          <button type="button" class="${p}-detail-edit" id="${p}-detail-edit-${instId}" title="Edit task"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>
           <button type="button" class="${p}-detail-close" id="${p}-detail-close-${instId}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -2837,6 +2841,8 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
 
       overlayEl.addEventListener("click",closeDetail);
       detailClose.addEventListener("click",e=>{e.stopPropagation();closeDetail();});
+      const detailEdit = detailEl.querySelector(`#${p}-detail-edit-${instId}`) as HTMLButtonElement|null;
+      detailEdit?.addEventListener("click",e=>{ e.stopPropagation(); const t=detailTask; closeDetail(); if(t) self._mtwOpenEdit?.(t); });
       const onDocKey = (e: KeyboardEvent) => { if (e.key === "Escape" && (detailTask||detailAudit)) closeDetail(); };
       document.addEventListener("keydown", onDocKey);
       self._mtwDocKey = onDocKey;
@@ -3311,12 +3317,12 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
 
       refreshBtn.addEventListener("click",load);
 
-      // ── Create task sheet ─────────────────────────────────────────────────
-      if(allowCreate && !auditMode){
+      // ── Create / edit task sheet ──────────────────────────────────────────
+      if(!auditMode){
         const newBtn=container.querySelector(`#${p}-new`) as HTMLButtonElement|null;
         let createEl:HTMLElement|null=null;
         const closeCreate=()=>{ if(!createEl) return; createEl.classList.remove("open"); overlayEl.classList.remove("open"); };
-        const openCreate=()=>{
+        const openCreate=(editTask?:Task)=>{
           if(!allInstalls.length){ showBanner("error","No task spaces available yet — try Refresh."); return; }
           if(!createEl){
             createEl=document.createElement("div");
@@ -3331,7 +3337,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           const existingTypes=[...new Set(allTasks.filter(t=>t.taskType&&t.taskType!=="audit-result").map(t=>t.taskType as string))].sort();
           const typeOpts=existingTypes.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
           createEl.innerHTML=`
-            <div class="${p}-create-head"><h3>${tr("newTaskHeading")}</h3>
+            <div class="${p}-create-head"><h3>${editTask?"Edit task":tr("newTaskHeading")}</h3>
               <button type="button" class="${p}-create-close" id="${p}-c-x"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>
             <div class="${p}-create-body">
@@ -3354,7 +3360,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             </div>
             <div class="${p}-create-foot">
               <button type="button" class="${p}-btn-cancel" id="${p}-c-cancel">${tr("cancel")}</button>
-              <button type="button" class="${p}-btn-save" id="${p}-c-save">${tr("createTask")}</button>
+              <button type="button" class="${p}-btn-save" id="${p}-c-save">${editTask?"Save changes":tr("createTask")}</button>
             </div>`;
           const $=(id:string)=>createEl!.querySelector(`#${p}-${id}`) as any;
           const instSel=$("c-inst"); const listSel=$("c-list");
@@ -3367,6 +3373,19 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             typeNew.style.display=isNew?"block":"none";
             if(isNew) typeNew.focus();
           });
+          if(editTask){
+            ($("c-title") as HTMLInputElement).value=stripTypeTag(editTask.title||"");
+            ($("c-desc") as HTMLTextAreaElement).value=stripTypeTag(editTask.description||"");
+            const instEl=$("c-inst");
+            if(instEl){ instEl.value=editTask.installationId; if(instEl.tagName==="SELECT"){ listSel.innerHTML=listOpts(editTask.installationId); (instEl as HTMLSelectElement).disabled=true; } }
+            listSel.value=editTask.listId||"";
+            const curType=parseTaskType(editTask.description||"")||parseTaskType(editTask.title||"")||editTask.taskType||"";
+            if(curType && [...typeSel.options].some((o:HTMLOptionElement)=>o.value===curType)) typeSel.value=curType;
+            const isCrit=/\[lvl:\s*critical\]/i.test(editTask.description||"")||String(editTask.auditSeverity||"").toLowerCase()==="critical";
+            ($("c-prio") as HTMLSelectElement).value=isCrit?"critical":(editTask.priority||"Priority_3");
+            const dp=String(editTask.dueDate||"").split("T")[0];
+            if(/^\d{4}-\d{2}-\d{2}$/.test(dp)) ($("c-due") as HTMLInputElement).value=dp;
+          }
           $("c-x").addEventListener("click",closeCreate);
           $("c-cancel").addEventListener("click",closeCreate);
           $("c-save").addEventListener("click",async()=>{
@@ -3389,15 +3408,25 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             const prio=isCritical?"Priority_1":prioVal;
             if(isCritical) finalDesc=finalDesc?`${finalDesc} [lvl: critical]`:`[lvl: critical]`;
             const saveBtn=$("c-save") as HTMLButtonElement;
-            saveBtn.disabled=true; saveBtn.textContent=tr("creating");
+            saveBtn.disabled=true; saveBtn.textContent=editTask?"Saving…":tr("creating");
             try{
-              const body:Record<string,unknown>={ title, status:"OPEN", priority:prio, taskListId:listId };
-              if(finalDesc) body.description=finalDesc;
-              if(due) body.dueDate=`${due}T00:00:00.000Z`;
-              const r=await fetch(`${baseUrl}/tasks/${instId2}/task`,{method:"POST",...apiOpts(),body:JSON.stringify(body)});
-              if(!r.ok) throw new Error(`HTTP ${r.status}`);
-              closeCreate(); hideBanner(); await load();
-            }catch(e:any){ showBanner("error",`${tr("createFailedPrefix")} ${e.message}`); saveBtn.disabled=false; saveBtn.textContent=tr("createTask"); }
+              if(editTask){
+                // Preserve hidden markers (recurrence/creator/notify) the editor can't see.
+                const preserved=((editTask.description||"").match(/\[(?:rrule|recur|by|notify):[^\]]*\]/gi)||[]).join(" ");
+                let editDesc=finalDesc; if(preserved) editDesc=editDesc?`${editDesc} ${preserved}`:preserved;
+                const body:Record<string,unknown>={ title, priority:prio, taskListId:listId, description:editDesc };
+                if(due) body.dueDate=`${due}T00:00:00.000Z`;
+                const r=await fetch(`${baseUrl}/tasks/${editTask.installationId}/task/${editTask.id}`,{method:"PATCH",...apiOpts(),body:JSON.stringify(body)});
+                if(!r.ok) throw new Error(`HTTP ${r.status}`);
+              } else {
+                const body:Record<string,unknown>={ title, status:"OPEN", priority:prio, taskListId:listId };
+                if(finalDesc) body.description=finalDesc;
+                if(due) body.dueDate=`${due}T00:00:00.000Z`;
+                const r=await fetch(`${baseUrl}/tasks/${instId2}/task`,{method:"POST",...apiOpts(),body:JSON.stringify(body)});
+                if(!r.ok) throw new Error(`HTTP ${r.status}`);
+              }
+              closeCreate(); hideBanner(); closeDetail(); await load();
+            }catch(e:any){ showBanner("error",`${(editTask?"Couldn't save changes:":tr("createFailedPrefix"))} ${e.message}`); saveBtn.disabled=false; saveBtn.textContent=editTask?"Save changes":tr("createTask"); }
           });
           // Side panel on desktop, bottom sheet on mobile (matches detail panel).
           createEl.classList.toggle("side", window.innerWidth>=720);
@@ -3406,8 +3435,9 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           requestAnimationFrame(()=>createEl!.classList.add("open"));
           ($("c-title") as HTMLInputElement)?.focus();
         };
-        newBtn?.addEventListener("click",openCreate);
+        if(allowCreate) newBtn?.addEventListener("click",()=>openCreate());
         overlayEl.addEventListener("click",closeCreate);
+        self._mtwOpenEdit=(t:Task)=>openCreate(t);
       }
 
       load();
@@ -3444,4 +3474,4 @@ const blockDefinition: BlockDefinition = {
   factory, configurationSchema, uiSchema, blockLevel:"block", iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNzEgMTcxIj48Y2lyY2xlIGN4PSI4NS41IiBjeT0iODUuNSIgcj0iODUuNSIgZmlsbD0iIzBFQTVFOSIvPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDQzLjUgNDMuNSkgc2NhbGUoMy41KSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTMgMTcgMiAyIDQtNCIvPjxwYXRoIGQ9Im0zIDcgMiAyIDQtNCIvPjxwYXRoIGQ9Ik0xMyA2aDgiLz48cGF0aCBkPSJNMTMgMTJoOCIvPjxwYXRoIGQ9Ik0xMyAxOGg4Ii8+PC9nPjwvc3ZnPg==",
 };
 
-window.defineBlock({ blockDefinition, author:"Staffbase", version:"1.0.0" } as ExternalBlockDefinition);
+window.defineBlock({ blockDefinition, author:"Staffbase", version:"1.1.0" } as ExternalBlockDefinition);
