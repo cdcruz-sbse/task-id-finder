@@ -138,6 +138,10 @@ function parseCampaign(text: string): string|null {
   return m?m[1].trim():null;
 }
 
+function requiresProof(text: string): boolean {
+  return PROOFREQ_REGEX.test(text||"");
+}
+
 // Recurrence markers written by the recurring-tasks-widget / scheduler:
 //   [rrule: ...]  — schedule definition on a hidden template task
 //   [recur: id@YYYY-MM-DD] — dedup stamp on a generated recurring task
@@ -147,6 +151,7 @@ const RECUR_REGEX = /\[recur:\s*[^\]]+\]/i;
 // Priority_1, so this distinguishes them). e.g. [lvl: critical]
 const LVL_REGEX = /\[lvl:\s*([^\]]+)\]/i;
 const CAMPAIGN_REGEX = /\[campaign:\s*([^\]]+)\]/i;
+const PROOFREQ_REGEX = /\[proofreq\]/i;
 
 function stripTypeTag(text: string): string {
   return text
@@ -155,6 +160,7 @@ function stripTypeTag(text: string): string {
     .replace(RECUR_REGEX,"")
     .replace(LVL_REGEX,"")
     .replace(CAMPAIGN_REGEX,"")
+    .replace(PROOFREQ_REGEX,"")
     .replace(/\[by:\s*[^\]]+\]/i,"")   // hidden creator stamp
     .replace(/\[notify:\s*[^\]]+\]/i,"")
     .replace(/\s{2,}/g," ")
@@ -2876,7 +2882,8 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         const isDone=task.status==="DONE"||task.status==="done"||task.status==="CLOSED";
         const newStatus=isDone?"OPEN":"CLOSED";
         detailToggle.disabled=true;
-        if(!isDone && requireProof){
+        const needProof=!isDone && (requireProof || requiresProof(task.description));
+        if(needProof){
           const ok=await openProof(task);
           if(!ok){ detailToggle.disabled=false; return; }
         }
@@ -2888,7 +2895,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           // Always record the completed/reopened status comment — the calendar and the
           // Manager activity feed read it for the completion timestamp. (Reassignment
           // logging stays gated behind Detailed Activity Logging.)
-          await fetchUsers(); postEditComment(task, statusAction(task,newStatus,!isDone&&requireProof));
+          await fetchUsers(); postEditComment(task, statusAction(task,newStatus,needProof));
           renderDetailContent(task);
           const cardEl=listWrap.querySelector(`[data-task-id="${task.id}"]`) as HTMLElement|null;
           if(cardEl){if(!isDone)cardEl.classList.add("done");else cardEl.classList.remove("done");}
@@ -2920,14 +2927,13 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         const cardEl=checkEl.closest(`.${p}-card`) as HTMLElement|null;
         const wrap=checkEl.closest(`.${p}-check-wrap`) as HTMLElement|null;
 
-        if(!isDone && requireProof){
-          const t=allTasks.find(x=>x.id===taskId);
-          if(t){
-            checkEl.style.pointerEvents="none";
-            const ok=await openProof(t);
-            checkEl.style.pointerEvents="";
-            if(!ok) return;
-          }
+        const _pt=allTasks.find(x=>x.id===taskId);
+        const needProof=!isDone && (requireProof || requiresProof(_pt?.description||""));
+        if(needProof && _pt){
+          checkEl.style.pointerEvents="none";
+          const ok=await openProof(_pt);
+          checkEl.style.pointerEvents="";
+          if(!ok) return;
         }
 
         checkEl.style.pointerEvents="none";
@@ -2941,7 +2947,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           const res=await fetch(`${baseUrl}/tasks/${installId}/task/${taskId}`,{method:"PATCH",...apiOpts(),body:JSON.stringify({status:newStatus})});
           if(!res.ok) throw new Error(`HTTP ${res.status}`);
           const task=allTasks.find(t=>t.id===taskId);
-          if(task){ task.status=newStatus; task.updateDate=new Date().toISOString(); await fetchUsers(); postEditComment(task, statusAction(task,newStatus,!isDone&&requireProof)); }
+          if(task){ task.status=newStatus; task.updateDate=new Date().toISOString(); await fetchUsers(); postEditComment(task, statusAction(task,newStatus,needProof)); }
           setTimeout(()=>{if(!auditMode){renderTypeFilters();renderList();}else renderList();},420);
         } catch(e:any){
           if(!isDone){checkEl.classList.remove("checked");if(cardEl)cardEl.classList.remove("done");}
@@ -3370,6 +3376,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
               ${allInstalls.length>1?`<div class="${p}-fld"><label>${esc(storeSingular)}</label><select class="${p}-sel" id="${p}-c-inst">${instOpts}</select></div>`:`<input type="hidden" id="${p}-c-inst" value="${esc(firstInst)}">`}
               <div class="${p}-fld"><label>${tr("list")}</label><select class="${p}-sel" id="${p}-c-list">${listOpts(firstInst)}</select></div>
               <div class="${p}-fld"><label>Campaign</label><select class="${p}-sel" id="${p}-c-campaign"><option value="">— None —</option></select></div>
+              <div class="${p}-fld"><label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600"><input type="checkbox" id="${p}-c-proof" style="width:16px;height:16px;accent-color:var(--primary)"> Require photo proof to complete</label></div>
               <div class="${p}-fld"><label>${tr("type")}</label>
                 <select class="${p}-sel" id="${p}-c-type">
                   <option value="">${tr("noType")}</option>
@@ -3410,6 +3417,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             ($("c-prio") as HTMLSelectElement).value=isCrit?"critical":(editTask.priority||"Priority_3");
             const dp=String(editTask.dueDate||"").split("T")[0];
             if(/^\d{4}-\d{2}-\d{2}$/.test(dp)) ($("c-due") as HTMLInputElement).value=dp;
+            const pchk=$("c-proof") as HTMLInputElement|null; if(pchk) pchk.checked=requiresProof(editTask.description||"");
           }
           $("c-x").addEventListener("click",closeCreate);
           $("c-cancel").addEventListener("click",closeCreate);
@@ -3437,6 +3445,8 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             let finalDesc=desc;
             const campId=(($("c-campaign") as HTMLSelectElement)||({value:""} as any)).value||"";
             if(campId) finalDesc=finalDesc?`${finalDesc} [campaign: ${campId}]`:`[campaign: ${campId}]`;
+            const wantProof=(($("c-proof") as HTMLInputElement)||({checked:false} as any)).checked;
+            if(wantProof) finalDesc=finalDesc?`${finalDesc} [proofreq]`:`[proofreq]`;
             if(taskType) finalDesc=finalDesc?`${finalDesc} [type: ${taskType}]`:`[type: ${taskType}]`;
             const due=$("c-due").value; // yyyy-mm-dd
             // "Critical" isn't a Staffbase priority — map it to Priority_1 and stamp [lvl: critical]
