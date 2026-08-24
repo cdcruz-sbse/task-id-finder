@@ -133,6 +133,11 @@ function parseTaskType(text: string): string|null {
   return m?m[1].trim().toLowerCase():null;
 }
 
+function parseCampaign(text: string): string|null {
+  const m=CAMPAIGN_REGEX.exec(text||"");
+  return m?m[1].trim():null;
+}
+
 // Recurrence markers written by the recurring-tasks-widget / scheduler:
 //   [rrule: ...]  — schedule definition on a hidden template task
 //   [recur: id@YYYY-MM-DD] — dedup stamp on a generated recurring task
@@ -141,6 +146,7 @@ const RECUR_REGEX = /\[recur:\s*[^\]]+\]/i;
 // Priority level stamp on generated recurring tasks (Critical & High both map to
 // Priority_1, so this distinguishes them). e.g. [lvl: critical]
 const LVL_REGEX = /\[lvl:\s*([^\]]+)\]/i;
+const CAMPAIGN_REGEX = /\[campaign:\s*([^\]]+)\]/i;
 
 function stripTypeTag(text: string): string {
   return text
@@ -148,6 +154,7 @@ function stripTypeTag(text: string): string {
     .replace(RRULE_REGEX,"")
     .replace(RECUR_REGEX,"")
     .replace(LVL_REGEX,"")
+    .replace(CAMPAIGN_REGEX,"")
     .replace(/\[by:\s*[^\]]+\]/i,"")   // hidden creator stamp
     .replace(/\[notify:\s*[^\]]+\]/i,"")
     .replace(/\s{2,}/g," ")
@@ -397,6 +404,23 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
       let lastCmt: { comments:any[]; authors:any[]; bodies:string[]; task:Task } | null = null;
       let allInstalls: Array<{id:string;title:string}> = [];           // for task creation
       const listsByInst = new Map<string, Array<{id:string;name:string}>>();
+      const campaignsById = new Map<string,string>();
+      let campaignsLoaded = false;
+      async function ensureCampaigns(){
+        if(campaignsLoaded) return; campaignsLoaded=true;
+        try{
+          const r=await fetch(`${baseUrl}/campaigns?limit=100&sort=title_ASC`,apiOpts());
+          if(!r.ok) return;
+          const d=await r.json();
+          const arr:any[]=Array.isArray(d)?d:(d.data||d.campaigns||[]);
+          for(const c of arr){
+            const id=c.id||c.campaignId; if(!id) continue;
+            const loc=c.config&&c.config.localization&&c.config.localization.en_US;
+            const title=c.title||c.name||(loc&&(loc.title||loc.name))||(c.localization&&c.localization.en_US&&c.localization.en_US.title)||id;
+            campaignsById.set(id,String(title));
+          }
+        }catch(_){}
+      }
       let usersList: Array<{id:string;name:string}> | null = null; // lazy, for reassign picker
       let userGroupIds: string[]     = [];
       const groupMap                 = new Map<string,string>(); // groupId → name
@@ -3345,6 +3369,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
               <div class="${p}-fld"><label>${tr("description")}</label><textarea class="${p}-in" id="${p}-c-desc" placeholder="${tr("descriptionPlaceholder")}"></textarea></div>
               ${allInstalls.length>1?`<div class="${p}-fld"><label>${esc(storeSingular)}</label><select class="${p}-sel" id="${p}-c-inst">${instOpts}</select></div>`:`<input type="hidden" id="${p}-c-inst" value="${esc(firstInst)}">`}
               <div class="${p}-fld"><label>${tr("list")}</label><select class="${p}-sel" id="${p}-c-list">${listOpts(firstInst)}</select></div>
+              <div class="${p}-fld"><label>Campaign</label><select class="${p}-sel" id="${p}-c-campaign"><option value="">— None —</option></select></div>
               <div class="${p}-fld"><label>${tr("type")}</label>
                 <select class="${p}-sel" id="${p}-c-type">
                   <option value="">${tr("noType")}</option>
@@ -3388,6 +3413,17 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           }
           $("c-x").addEventListener("click",closeCreate);
           $("c-cancel").addEventListener("click",closeCreate);
+          const campSel=$("c-campaign") as HTMLSelectElement|null;
+          const fillCampaigns=()=>{
+            if(!campSel) return;
+            const cur=editTask?(parseCampaign(editTask.description||"")||""):"";
+            let opts=`<option value="">— None —</option>`;
+            if(cur && !campaignsById.has(cur)) opts+=`<option value="${esc(cur)}" selected>${esc(cur)}</option>`;
+            opts+=[...campaignsById.entries()].map(([id,t])=>`<option value="${esc(id)}"${cur===id?" selected":""}>${esc(t)}</option>`).join("");
+            campSel.innerHTML=opts;
+          };
+          fillCampaigns();
+          ensureCampaigns().then(fillCampaigns);
           $("c-save").addEventListener("click",async()=>{
             const title=($("c-title").value||"").trim();
             if(!title){ $("c-title").focus(); return; }
@@ -3399,6 +3435,8 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
             // Embed the type as a [type: X] tag in the description — same convention
             // the tasks-integration-widget uses and parseTaskType() reads on load.
             let finalDesc=desc;
+            const campId=(($("c-campaign") as HTMLSelectElement)||({value:""} as any)).value||"";
+            if(campId) finalDesc=finalDesc?`${finalDesc} [campaign: ${campId}]`:`[campaign: ${campId}]`;
             if(taskType) finalDesc=finalDesc?`${finalDesc} [type: ${taskType}]`:`[type: ${taskType}]`;
             const due=$("c-due").value; // yyyy-mm-dd
             // "Critical" isn't a Staffbase priority — map it to Priority_1 and stamp [lvl: critical]
