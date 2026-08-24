@@ -54,6 +54,7 @@
   .b-oneoff{background:#f1f5f9;color:#475569;}
   .b-prio{border:1.5px solid currentColor;color:#6b7280;}
   .b-store{background:#eef2ff;color:#4338ca;}
+  .b-proof{background:rgba(217,119,6,.12);color:#B45309;}
   .ctitle{font-size:14px;font-weight:600;line-height:1.4;}
   .card.done .ctitle{text-decoration:line-through;color:var(--gray);}
   .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:5px;font-size:11px;color:var(--gray-lt);font-weight:600;}
@@ -88,7 +89,7 @@ const CAT={compliance:"#8B4513",safety:"#D97706",storetask:"#0EA5E9",training:"#
 const PRI={Priority_1:"High",Priority_2:"Med",Priority_3:"Low"};
 const T=[
  {id:"t01",inst:"27048",title:"Unlock and disarm the store",type:"storetask",recur:true,prio:"Priority_1",status:"OPEN"},
- {id:"t04",inst:"27048",title:"Check walk-in freezer temperature log",type:"safety",recur:true,prio:"Priority_1",status:"OPEN"},
+ {id:"t04",inst:"27048",title:"Check walk-in freezer temperature log",type:"safety",recur:true,prio:"Priority_1",status:"OPEN",proof:true},
  {id:"t06",inst:"27048",title:"Complete monthly food-safety training",type:"training",recur:false,prio:"Priority_2",status:"OPEN"},
  {id:"t08",inst:"27048",title:"Set up new seasonal end-cap display",type:"merchandising",recur:false,prio:"Priority_3",status:"OPEN"},
  {id:"t10",inst:"27048",title:"Update shelf price tags for promotions",type:"merchandising",recur:false,prio:"Priority_3",status:"CLOSED"},
@@ -133,6 +134,7 @@ function render(){
     const m=[`<span class="b" style="background:${c}">${esc(t.type)}</span>`,
       t.recur?`<span class="b b-recur">${IC.recur} Recurring</span>`:`<span class="b b-oneoff">One-off</span>`,
       t.prio!=="Priority_3"?`<span class="b b-prio">${PRI[t.prio]}</span>`:""].filter(Boolean);
+    if(t.proof) m.push(`<span class="b b-proof">📷 Proof</span>`);
     if(showStore) m.push(`<span class="b b-store">${esc(sname)}</span>`);
     return `<div class="card ${done?"done":""}"><button class="copyid" data-copy="${t.inst}/${t.id}" title="Copy task ID">${IC.copy}</button>
       <div class="check ${done?"on":""}">${IC.check}</div>
