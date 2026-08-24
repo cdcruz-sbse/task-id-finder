@@ -39,6 +39,7 @@ const configurationSchema: JSONSchema7 = {
     requirephotoproof:  { type:"boolean", title:"Require Photo Proof", default: false },
     allowtaskcreation:  { type:"boolean", title:"Allow Task Creation", default: false },
     allowtaskdeletion:  { type:"boolean", title:"Allow Task Deletion", default: false },
+    allowtaskarchive:   { type:"boolean", title:"Allow Task Archive", default: false },
     allowtaskassignment:{ type:"boolean", title:"Allow Task Assignment", default: false },
     notifyonassign:     { type:"boolean", title:"Notify on Assignment", default: true },
     detailedlogging:    { type:"boolean", title:"Detailed Activity Logging", default: false },
@@ -99,6 +100,7 @@ const uiSchema: UiSchema = {
   requirephotoproof:  { "ui:help":"When on, marking a task done requires the viewer to submit a photo. The photo is posted as a proof comment on the task, and the task is only marked done once the photo is uploaded." },
   allowtaskcreation:  { "ui:help":"Show a “New Task” button so users can create tasks from this widget" },
   allowtaskdeletion:  { "ui:help":"Show a “Delete task” button in the task detail (two-tap confirm). Permanently deletes the task via the API." },
+  allowtaskarchive:   { "ui:help":"Show an “Archive” button in the task detail — non-destructive; archives the task so it drops off the list but can be restored." },
   allowtaskassignment:{ "ui:help":"Allow reassigning a task (to a group or person) from its detail panel — works in both normal and audit mode" },
   notifyonassign:     { "ui:help":"Send a Staffbase notification (“You were assigned a new task”) to people newly assigned a task via this widget" },
   detailedlogging:    { "ui:help":"Record reassignments and completions as hidden activity entries the Manager Tasks widget surfaces in its activity feed. Off by default." },
@@ -323,6 +325,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
       const requireProof   = this.getAttribute("requirephotoproof") === "true";
       const allowCreate    = this.getAttribute("allowtaskcreation") === "true";
       const allowDelete    = this.getAttribute("allowtaskdeletion") === "true";
+      const allowArchive   = this.getAttribute("allowtaskarchive") === "true";
       const allowAssign    = this.getAttribute("allowtaskassignment") === "true";
       const notifyOnAssign = this.getAttribute("notifyonassign")       !== "false";
       const detailedLogging = this.getAttribute("detailedlogging")     === "true";
@@ -526,6 +529,9 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
           .${p}-detail-delete:hover{background:var(--error);color:#fff;border-color:var(--error)}
           .${p}-detail-delete.confirm{background:var(--error);color:#fff;border-color:var(--error)}
           .${p}-detail.audit-view .${p}-detail-delete{display:none}
+          .${p}-detail-archive{width:100%;margin-top:8px;padding:11px;border-radius:var(--r-md);border:1.5px solid var(--border);background:#f3f4f6;color:var(--gray);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+          .${p}-detail-archive:hover{background:var(--border);color:var(--dark)}
+          .${p}-detail.audit-view .${p}-detail-archive{display:none}
           /* ── Attachments ── */
           .${p}-att{margin-top:16px}
           .${p}-att-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -1114,6 +1120,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         <div class="${p}-detail-body" id="${p}-detail-body-${instId}"></div>
         <div class="${p}-detail-foot">
           <button type="button" class="${p}-detail-toggle-btn" id="${p}-detail-toggle-${instId}"></button>
+          ${allowArchive?`<button type="button" class="${p}-detail-archive" id="${p}-detail-archive-${instId}">Archive task</button>`:""}
           ${allowDelete?`<button type="button" class="${p}-detail-delete" id="${p}-detail-delete-${instId}">Delete task</button>`:""}
         </div>
       `;
@@ -2881,12 +2888,25 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
         }
         const _delBtn=detailEl.querySelector(`#${p}-detail-delete-${instId}`) as HTMLButtonElement|null;
         if(_delBtn){ _delBtn.classList.remove("confirm"); _delBtn.textContent="Delete task"; _delBtn.disabled=false; _delBtn.dataset.armed=""; }
+        const _arcBtn=detailEl.querySelector(`#${p}-detail-archive-${instId}`) as HTMLButtonElement|null;
+        if(_arcBtn){ _arcBtn.textContent="Archive task"; _arcBtn.disabled=false; }
       }
 
       overlayEl.addEventListener("click",closeDetail);
       detailClose.addEventListener("click",e=>{e.stopPropagation();closeDetail();});
       const detailEdit = detailEl.querySelector(`#${p}-detail-edit-${instId}`) as HTMLButtonElement|null;
       detailEdit?.addEventListener("click",e=>{ e.stopPropagation(); const t=detailTask; closeDetail(); if(t) self._mtwOpenEdit?.(t); });
+      const detailArchive = detailEl.querySelector(`#${p}-detail-archive-${instId}`) as HTMLButtonElement|null;
+      detailArchive?.addEventListener("click",async()=>{
+        if(!detailTask) return;
+        const task=detailTask;
+        detailArchive.disabled=true; detailArchive.textContent="Archiving…";
+        try{
+          const res=await fetch(`${baseUrl}/tasks/${task.installationId}/task/${task.id}/archive`,{method:"POST",...apiOpts()});
+          if(!res.ok) throw new Error(`HTTP ${res.status}`);
+          closeDetail(); hideBanner(); await load();
+        }catch(e:any){ showBanner("error",`Couldn't archive task: ${e.message}`); detailArchive.disabled=false; detailArchive.textContent="Archive task"; }
+      });
       const detailDelete = detailEl.querySelector(`#${p}-detail-delete-${instId}`) as HTMLButtonElement|null;
       let delArmT:any;
       detailDelete?.addEventListener("click",async()=>{
@@ -3541,7 +3561,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
     }
 
     static get observedAttributes(){
-      return ["apitoken","baseurl","usethemecolors","primarycolor","accentcolor","backgroundcolor","storelabelsingular","storelabelplural","typecolors","showalltasks","showdonetasks","auditmode","enablecomments","allowtaskcreation","allowtaskdeletion","allowtaskassignment","notifyonassign","detailedlogging","debugmode","limitheight","maxheight","showcalendar","showupcomingrecurring"];
+      return ["apitoken","baseurl","usethemecolors","primarycolor","accentcolor","backgroundcolor","storelabelsingular","storelabelplural","typecolors","showalltasks","showdonetasks","auditmode","enablecomments","allowtaskcreation","allowtaskdeletion","allowtaskarchive","allowtaskassignment","notifyonassign","detailedlogging","debugmode","limitheight","maxheight","showcalendar","showupcomingrecurring"];
     }
   };
 };
@@ -3550,7 +3570,7 @@ const factory: BlockFactory = (BaseBlockClass, widgetApi) => {
 
 const blockDefinition: BlockDefinition = {
   name:"task-id-finder", label:"Store Tasks",
-  attributes:["apitoken","baseurl","usethemecolors","primarycolor","accentcolor","backgroundcolor","storelabelsingular","storelabelplural","typecolors","showalltasks","showdonetasks","auditmode","enablecomments","requirephotoproof","allowtaskcreation","allowtaskdeletion","allowtaskassignment","notifyonassign","detailedlogging","debugmode","limitheight","maxheight","showcalendar","showupcomingrecurring"],
+  attributes:["apitoken","baseurl","usethemecolors","primarycolor","accentcolor","backgroundcolor","storelabelsingular","storelabelplural","typecolors","showalltasks","showdonetasks","auditmode","enablecomments","requirephotoproof","allowtaskcreation","allowtaskdeletion","allowtaskarchive","allowtaskassignment","notifyonassign","detailedlogging","debugmode","limitheight","maxheight","showcalendar","showupcomingrecurring"],
   factory, configurationSchema, uiSchema, blockLevel:"block", iconUrl: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNzEgMTcxIj48Y2lyY2xlIGN4PSI4NS41IiBjeT0iODUuNSIgcj0iODUuNSIgZmlsbD0iIzBFQTVFOSIvPjxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDQzLjUgNDMuNSkgc2NhbGUoMy41KSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0ibTMgMTcgMiAyIDQtNCIvPjxwYXRoIGQ9Im0zIDcgMiAyIDQtNCIvPjxwYXRoIGQ9Ik0xMyA2aDgiLz48cGF0aCBkPSJNMTMgMTJoOCIvPjxwYXRoIGQ9Ik0xMyAxOGg4Ii8+PC9nPjwvc3ZnPg==",
 };
 
